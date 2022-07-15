@@ -93,17 +93,26 @@ end
 
 # load all key-value pairs from sources
 function load!(store::Store, sources::FigSource...)
-    @lock store.lock begin
-        st = store.store
-        for source in sources
-            for (k, v) in source
-                hist = get!(() -> Fig[], st, k)
-                push!(hist, Fig(k, v, source))
+    # first we load configs from all sources
+    # *not* replacing figs we've already seen
+    figs = Dict{String, Fig}()
+    for source in sources
+        for (k, v) in source
+            if !haskey(figs, k)
+                figs[k] = Fig(k, v, source)
             end
         end
     end
+    # now we update store w/ new figs
+    # *replacing* figs we've already seen
+    @lock store.lock begin
+        for (k, v) in figs
+            hist = get!(() -> Fig[], st, k)
+            push!(hist, Fig(k, v, source))
+        end
+    end
+    return store
 end
-
 
 # FigSources
 # supports conventions here: https://www.gnu.org/software/libc/manual/html_node/Argument-Syntax.html
@@ -211,7 +220,7 @@ end
 
 Base.IteratorSize(::Type{IniFile}) = Base.SizeUnknown()
 
-Base.iterate(ini::IniFile) = iterate(inifile(isfile(file) ? open(file) : IOBuffer(), ini.section))
+Base.iterate(ini::IniFile) = iterate(inifile(isfile(ini.file) ? open(ini.file) : IOBuffer(), ini.section))
 
 # convenience interface for parsing a specific section of an INI file
 # returning key-values of that section
