@@ -92,7 +92,7 @@ end
 Store() = Store(ReentrantLock(), Dict{String, Fig}())
 
 function Base.show(io::IO, store::Store)
-    @lock store.lock begin
+    Base.@lock store.lock begin
         print(io, "Figgy.Store:")
         if isempty(store.store)
             print(io, "\nNo entries")
@@ -106,7 +106,7 @@ end
 
 "Completely clear all config items and their history from a `Figgy.Store`"
 function Base.empty!(store::Store)
-    @lock store.lock begin
+    Base.@lock store.lock begin
         empty!(store.store)
     end
     return store
@@ -114,7 +114,7 @@ end
 
 "Completely delete a single config item, including its history, as identified by `key`"
 function Base.delete!(store::Store, key::String)
-    @lock store.lock begin
+    Base.@lock store.lock begin
         delete!(store.store, key)
     end
     return store
@@ -122,14 +122,14 @@ end
 
 "Check whether a `Figgy.Store` contains a config item identified by `key`"
 function Base.haskey(store::Store, key::String)
-    @lock store.lock begin
+    Base.@lock store.lock begin
         return haskey(store.store, key)
     end
 end
 
 "Get the current value for a config item identified by `key`, throws `KeyError` if not found"
 function Base.getindex(store::Store, key::String)
-    @lock store.lock begin
+    Base.@lock store.lock begin
         st = store.store
         !haskey(st, key) && throw(KeyError(key))
         fig = st[key]
@@ -140,7 +140,7 @@ end
 
 "Get the current value for a config item identified by `key`, returns `default` if not found"
 function Base.get(store::Store, key::String, default=nothing)
-    @lock store.lock begin
+    Base.@lock store.lock begin
         st = store.store
         !haskey(st, key) && return default
         fig = st[key]
@@ -151,7 +151,7 @@ end
 
 "Get the full `Figgy.Fig` object for a config item identified by `key`, throws `KeyError` if not found; includes history of values/sources"
 function getfig(store::Store, key::String)
-    @lock store.lock begin
+    Base.@lock store.lock begin
         st = store.store
         !haskey(st, key) && throw(KeyError(key))
         return st[key]
@@ -208,7 +208,7 @@ function load!(store::Store, sources...; name::String="", log::Bool=true)
     end
     # now we update store w/ new figs
     # *replacing* current values of figs we've already seen
-    @lock store.lock begin
+    Base.@lock store.lock begin
         for (k, (v, src)) in figs
             fig = get!(() -> Fig(k, Any[], FigSource[]), store.store, k)
             update!(fig, v, src)
