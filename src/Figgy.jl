@@ -222,6 +222,7 @@ end
 struct KeyMap{T} <: FigSource
     source::T # any key-value iterator/result of Figgy.load
     mapping::Any # Function or Dict{String} w/ vals of String or Function
+    select::Bool
 end
 
 """
@@ -238,8 +239,8 @@ Common use-cases for `Figgy.kmap` include normalizing environment variable names
 program arguments like `--profile` to a common config name like `aws_profile`.
 """
 
-kmap(source, mappings::Pair{String}...) = KeyMap(source, Dict(mappings))
-kmap(source, mappings::Union{Function, Dict{String}}) = KeyMap(source, mappings)
+kmap(source, mappings::Pair{String}...; select::Bool=false) = KeyMap(source, Dict(mappings), select)
+kmap(source, mappings::Union{Function, Dict{String}}; select::Bool=false) = KeyMap(source, mappings, select)
 load(x::KeyMap) = x
 
 Base.IteratorSize(::Type{KeyMap{T}}) where {T} = Base.IteratorSize(T)
@@ -250,6 +251,9 @@ function Base.iterate(x::KeyMap, st...)
     state === nothing && return nothing
     kv, stt = state
     key = kv[1]
+    if x.select && !haskey(x.mapping, key)
+        return iterate(x, stt)
+    end
     key2 = x.mapping isa Function ? x.mapping(key) : get(x.mapping, key, key)
     kv2 = (key2 isa Function ? key2(key) : key === key2 ? key : key2) => kv[2]
     return kv2, stt

@@ -44,6 +44,10 @@ end
     Figgy.load!(store, Figgy.kmap(src, k -> uppercase(k)))
     @test store["K"] == "v"
     @test store["K2"] == "v2"
+    empty!(store)
+    Figgy.load!(store, Figgy.kmap(src, "k2" => "kk2"; select=true))
+    @test store["kk2"] == "v2"
+    @test !haskey(store, "k")
 end
 
 @testset "Figgy.select" begin
