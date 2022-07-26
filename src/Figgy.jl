@@ -226,7 +226,7 @@ struct KeyMap{T} <: FigSource
 end
 
 """
-    Figgy.kmap(source, mappings)
+    Figgy.kmap(source, mappings; select::Bool=false)
 
 Allows lazily transforming keys of a `Figgy.FigSource` object. Source is any official `Figgy.FigSource` object,
 or a generic key-value-producer object, like `Dict`, `NamedTuple`, or `Pair`. Mappings can be a one of the following:
@@ -237,6 +237,9 @@ or a generic key-value-producer object, like `Dict`, `NamedTuple`, or `Pair`. Ma
 
 Common use-cases for `Figgy.kmap` include normalizing environment variable names like `AWS_PROFILE` and 
 program arguments like `--profile` to a common config name like `aws_profile`.
+
+The `select` keyword argument indicates that only provided key mappings should be "selected" from the
+config source, thus combining the functionaltiy of [`Figgy.select`](@ref).
 """
 
 kmap(source, mappings::Pair{String}...; select::Bool=false) = KeyMap(source, Dict(mappings), select)
