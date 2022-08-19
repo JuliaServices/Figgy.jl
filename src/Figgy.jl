@@ -22,7 +22,7 @@ abstract type FigSource end
 
 Required function of the `Figgy.FigSource` interface. See the docs for [`Figgy.FigSource`](@ref) for details.
 """
-function load end
+load(x) = x
 
 # NamedSource & ObjectSource are the only FigSource that *don't* implement `Figgy.load`,
 # since they're special-cased in `Figgy.load!` for non-`FigSource` objects. We specifically *don't* want to keep a reference
