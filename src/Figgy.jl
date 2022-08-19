@@ -22,7 +22,7 @@ abstract type FigSource end
 
 Required function of the `Figgy.FigSource` interface. See the docs for [`Figgy.FigSource`](@ref) for details.
 """
-function load end
+load(x) = x
 
 # NamedSource & ObjectSource are the only FigSource that *don't* implement `Figgy.load`,
 # since they're special-cased in `Figgy.load!` for non-`FigSource` objects. We specifically *don't* want to keep a reference
@@ -249,17 +249,19 @@ load(x::KeyMap) = x
 Base.IteratorSize(::Type{KeyMap{T}}) where {T} = Base.IteratorSize(T)
 Base.length(x::KeyMap) = length(x.source)
 
-function Base.iterate(x::KeyMap, st...)
-    state = iterate(x.source, st...)
+Base.iterate(x::KeyMap) = _iterate(x, load(x.source))
+Base.iterate(x::KeyMap, (source, st)) = _iterate(x, source, st)
+function _iterate(x::KeyMap, source, st...)
+    state = iterate(source, st...)
     state === nothing && return nothing
     kv, stt = state
     key = kv[1]
     if x.select && !haskey(x.mapping, key)
-        return iterate(x, stt)
+        return _iterate(x, source, stt)
     end
     key2 = x.mapping isa Function ? x.mapping(key) : get(x.mapping, key, key)
     kv2 = (key2 isa Function ? key2(key) : key === key2 ? key : key2) => kv[2]
-    return kv2, stt
+    return kv2, (source, stt)
 end
 
 struct Select{T} <: FigSource
@@ -284,16 +286,18 @@ load(x::Select) = x
 Base.IteratorSize(::Type{Select{T}}) where {T} = Base.IteratorSize(T)
 Base.length(x::Select) = length(x.source)
 
-function Base.iterate(x::Select, st...)
-    state = iterate(x.source, st...)
+Base.iterate(x::Select) = _iterate(x, load(x.source))
+Base.iterate(x::Select, (source, st)) = _iterate(x, source, st)
+function _iterate(x::Select, source, st...)
+    state = iterate(source, st...)
     state === nothing && return nothing
     kv, stt = state
     if x.set isa Set && !(kv[1] in x.set)
-        return iterate(x, stt)
+        return _iterate(x, source, stt)
     elseif x.set isa Function && !(x.set(kv[1]))
-        return iterate(x, stt)
+        return _iterate(x, source, stt)
     end
-    return kv, stt
+    return kv, (source, stt)
 end
 
 include("sources.jl")
