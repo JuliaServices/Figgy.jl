@@ -185,6 +185,12 @@ end
     Figgy.load!(store, Figgy.TomlObject(data, "database"))
     @test store["server"] == "192.168.1.1"
     @test store["ports"] == [ 8001, 8001, 8002 ]
+    data = """
+    server = "192.168.1.2"
+    """
+    store = Figgy.Store()
+    Figgy.load!(store, Figgy.TomlObject(data))
+    @test store["server"] == "192.168.1.2"
 end
 
 end # @testset "Figgy"

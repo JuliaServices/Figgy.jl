@@ -390,13 +390,15 @@ is toml data directly. The `path` argument is optional and is used to
 specify a nested path to an object that should be used for config pairs.
 """
 function TomlObject(file::String, path="")
-   if isfile(file)
+    if isfile(file)
         figs = TOML.parsefile(file)
-   else
+    else
         figs = TOML.parse(file)
-   end
-   for key in split(path, '.')
-        figs = figs[key]
-   end
-   return TomlObject(figs)
+    end
+    if !isempty(path)
+        for key in split(path, '.')
+            figs = figs[key]
+        end
+    end
+    return TomlObject(figs)
 end
