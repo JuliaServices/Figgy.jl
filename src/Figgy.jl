@@ -2,6 +2,8 @@ module Figgy
 
 using TOML
 
+include("crypt.jl")
+
 """
     Figgy.FigSource
 
@@ -241,7 +243,7 @@ program arguments like `--profile` to a common config name like `aws_profile`.
 The `select` keyword argument indicates that only provided key mappings should be "selected" from the
 config source, thus combining the functionaltiy of [`Figgy.select`](@ref).
 """
-
+function kmap end
 kmap(source, mappings::Pair{String}...; select::Bool=false) = KeyMap(source, Dict(mappings), select)
 kmap(source, mappings::Union{Function, Dict{String}}; select::Bool=false) = KeyMap(source, mappings, select)
 load(x::KeyMap) = x
