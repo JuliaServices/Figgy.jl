@@ -65,44 +65,46 @@ end
 @testset "Figgy.Crypt" begin
     salt = UInt8.(1:16)
     iv = UInt8.(17:28)
-    enc = Figgy.Crypt.encrypt("secret", "hello"; salt=salt, iv=iv)
+    enc = Figgy.encrypt("secret", "hello"; salt=salt, iv=iv)
     @test enc == "ENC[figgy-v1](RklHQ1JZUFQBAwEAAzRQIBAMEAAAAAUBAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscxph1MdIWaeW7MN9IYrGzEn5K0KD2)"
     @test Figgy.Crypt.is_encrypted(enc)
-    @test Figgy.Crypt.decrypt("secret", enc) == "hello"
-    @test Figgy.Crypt.decrypt(UInt8.(codeunits("secret")), enc) == "hello"
+    @test Figgy.decrypt("secret", enc) == "hello"
+    @test Figgy.decrypt(UInt8.(codeunits("secret")), enc) == "hello"
     envelope = Figgy.Crypt.parse_envelope(enc)
     @test envelope.format == :figgy_v1
     @test envelope.key_id === nothing
-    @test_throws Figgy.Crypt.InvalidCiphertextError Figgy.Crypt.decrypt("wrong", enc)
+    @test_throws Figgy.Crypt.InvalidCiphertextError Figgy.decrypt("wrong", enc)
 
-    keyed = Figgy.Crypt.encrypt("secret", "hello"; salt=salt, iv=iv, key_id="v1")
+    keyed = Figgy.encrypt("secret", "hello"; salt=salt, iv=iv, key_id="v1")
     @test Figgy.Crypt.parse_envelope(keyed).key_id == "v1"
-    @test Figgy.Crypt.decrypt(Dict("v1" => "secret"), keyed) == "hello"
-    @test_throws KeyError Figgy.Crypt.decrypt(Dict("v2" => "secret"), keyed)
-    @test_throws ArgumentError Figgy.Crypt.encrypt("secret", "hello"; key_id="bad key")
+    @test Figgy.decrypt(Dict("v1" => "secret"), keyed) == "hello"
+    @test_throws KeyError Figgy.decrypt(Dict("v2" => "secret"), keyed)
+    @test_throws ArgumentError Figgy.encrypt("secret", "hello"; key_id="bad key")
+    @test :encrypt in names(Figgy.Crypt)
+    @test :decrypt in names(Figgy.Crypt)
 
-    aad_enc = Figgy.Crypt.encrypt("secret", "hello"; salt=salt, iv=iv, aad="figgy")
-    @test Figgy.Crypt.decrypt("secret", aad_enc; aad="figgy") == "hello"
-    @test_throws Figgy.Crypt.InvalidCiphertextError Figgy.Crypt.decrypt("secret", aad_enc; aad="other")
+    aad_enc = Figgy.encrypt("secret", "hello"; salt=salt, iv=iv, aad="figgy")
+    @test Figgy.decrypt("secret", aad_enc; aad="figgy") == "hello"
+    @test_throws Figgy.Crypt.InvalidCiphertextError Figgy.decrypt("secret", aad_enc; aad="other")
 
     tampered = copy(envelope.payload)
     tampered[end] ⊻= 0x01
-    @test_throws Figgy.Crypt.InvalidCiphertextError Figgy.Crypt.decrypt("secret", "ENC[figgy-v1]($(base64encode(tampered)))")
+    @test_throws Figgy.Crypt.InvalidCiphertextError Figgy.decrypt("secret", "ENC[figgy-v1]($(base64encode(tampered)))")
 
-    empty_enc = Figgy.Crypt.encrypt("secret", UInt8[]; salt=salt, iv=iv)
+    empty_enc = Figgy.encrypt("secret", UInt8[]; salt=salt, iv=iv)
     @test Figgy.Crypt.decrypt_bytes("secret", empty_enc) == UInt8[]
 
     aes128 = Figgy.Crypt.CipherConfig(; algorithm=:aes_128_gcm, iterations=1_000)
-    enc128 = Figgy.Crypt.encrypt("secret", "small"; config=aes128, salt=salt, iv=iv)
-    @test Figgy.Crypt.decrypt("secret", enc128) == "small"
+    enc128 = Figgy.encrypt("secret", "small"; config=aes128, salt=salt, iv=iv)
+    @test Figgy.decrypt("secret", enc128) == "small"
 
     jasypt = Figgy.Crypt.jasypt_config(iterations=1_000)
     jasypt_iv = UInt8.(17:32)
-    jasypt_enc = Figgy.Crypt.encrypt("secret", "hello"; config=jasypt, salt=salt, iv=jasypt_iv)
+    jasypt_enc = Figgy.encrypt("secret", "hello"; config=jasypt, salt=salt, iv=jasypt_iv)
     @test jasypt_enc == "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyALLoLpqB+dUx0JfqS5Cze2"
-    @test Figgy.Crypt.decrypt("secret", jasypt_enc; config=jasypt) == "hello"
-    @test Figgy.Crypt.decrypt("secret", "ENC($jasypt_enc)"; config=jasypt) == "hello"
-    @test_throws Figgy.Crypt.InvalidCiphertextError Figgy.Crypt.decrypt("wrong", jasypt_enc; config=jasypt)
+    @test Figgy.decrypt("secret", jasypt_enc; config=jasypt) == "hello"
+    @test Figgy.decrypt("secret", "ENC($jasypt_enc)"; config=jasypt) == "hello"
+    @test_throws Figgy.Crypt.InvalidCiphertextError Figgy.decrypt("wrong", jasypt_enc; config=jasypt)
 end
 
 @testset "Figgy.ProgramArguments" begin

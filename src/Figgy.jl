@@ -5,6 +5,32 @@ using TOML
 include("crypt.jl")
 
 """
+    Figgy.encrypt(secret, plaintext; kwargs...)
+
+Encrypt a string or byte vector with Figgy's OpenSSL-backed password-based
+config-value encryption. This is the public convenience wrapper for
+[`Figgy.Crypt.encrypt`](@ref).
+"""
+function encrypt(secret, plaintext; kwargs...)
+    return Crypt.encrypt(secret, plaintext; kwargs...)
+end
+
+"""
+    Figgy.decrypt(secret, encrypted; kwargs...)
+    Figgy.decrypt(keys::AbstractDict, encrypted; kwargs...)
+
+Decrypt an encrypted config value and return UTF-8 text. This is the public
+convenience wrapper for [`Figgy.Crypt.decrypt`](@ref).
+"""
+function decrypt(secret, encrypted::AbstractString; kwargs...)
+    return Crypt.decrypt(secret, encrypted; kwargs...)
+end
+
+function decrypt(keys::AbstractDict, encrypted::AbstractString; kwargs...)
+    return Crypt.decrypt(keys, encrypted; kwargs...)
+end
+
+"""
     Figgy.FigSource
 
 Abstract type for all concrete config subtypes. The interface for `FigSource` includes:

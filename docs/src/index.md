@@ -71,8 +71,8 @@ stored in files, environment variables, or secret stores. The default profile us
 and AES-256-GCM, returning a self-describing `ENC[figgy-v1](...)` envelope:
 
 ```julia
-encrypted = Figgy.Crypt.encrypt("password", "database-password"; key_id="v1")
-plain = Figgy.Crypt.decrypt(Dict("v1" => "password"), encrypted)
+encrypted = Figgy.encrypt("password", "database-password"; key_id="v1")
+plain = Figgy.decrypt(Dict("v1" => "password"), encrypted)
 ```
 
 Use explicit `key_id`s when rotating keys so decryptors can select the intended key instead of trying
@@ -81,6 +81,6 @@ multiple keys and hoping failures are deterministic. For Java/Jasypt interoperab
 
 ```julia
 config = Figgy.Crypt.jasypt_config()
-encrypted = Figgy.Crypt.encrypt("password", "database-password"; config)
-plain = Figgy.Crypt.decrypt("password", encrypted; config)
+encrypted = Figgy.encrypt("password", "database-password"; config)
+plain = Figgy.decrypt("password", encrypted; config)
 ```

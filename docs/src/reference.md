@@ -28,6 +28,8 @@ Figgy.TomlObject
 ## Encrypted Config Values
 
 ```@docs
+Figgy.encrypt
+Figgy.decrypt
 Figgy.Crypt
 Figgy.Crypt.CipherConfig
 Figgy.Crypt.Envelope

@@ -14,6 +14,8 @@ using Base64
 using OpenSSL_jll
 using Random
 
+export decrypt, encrypt
+
 """
     Figgy.Crypt.CipherConfig(; kwargs...)
 
