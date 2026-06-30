@@ -88,12 +88,12 @@ end
 # convenience interface for parsing a specific section of an INI file
 # returning key-values of that section
 function load(ini::IniFile)
-    io = isfile(ini.file) ? open(ini.file) : IOBuffer(ini.file)
+    contents = isfile(ini.file) ? read(ini.file, String) : ini.file
     section = ini.section
     figs = Dict{String, String}()
     section = "[$section]"
     insection = false
-    for line in eachline(io)
+    for line in split(contents, '\n')
         line = strip(line)
         if insection
             if startswith(line, "#") || startswith(line, ";") || line == ""
@@ -259,7 +259,7 @@ function JsonObject(json::Union{AbstractString, AbstractVector{UInt8}}, path::St
     pos, root = readvalue(buf, pos, len, b)
     if !isempty(path)
         for key in split(path, '.')
-            root = root[key]
+            root = root[key]::Dict{String, Any}
         end
     end
     return JsonObject(root)
@@ -304,7 +304,7 @@ function XmlObject(xml::Union{AbstractString, AbstractVector{UInt8}}, path::Stri
     pos, (rootkey, root) = readxml(buf, pos, len, b)
     if !isempty(path)
         for key in split(path, '.')
-            root = root[key]
+            root = root[key]::Dict{String, Any}
         end
     end
     return XmlObject(root)
@@ -397,7 +397,7 @@ function TomlObject(file::String, path="")
     end
     if !isempty(path)
         for key in split(path, '.')
-            figs = figs[key]
+            figs = figs[key]::Dict{String, Any}
         end
     end
     return TomlObject(figs)
