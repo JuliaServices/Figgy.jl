@@ -212,13 +212,17 @@ See [`Figgy.kmap`](@ref) and [`Figgy.select`](@ref) for helper functions to tran
 function load!(store::Store, sources...; name::String="", log::Bool=true)
     # first we load configs from all sources
     # *not* replacing figs we've already seen
-    figs = Dict{String, Tuple{Any, FigSource}}()
+    seen = Set{String}()
+    figs = Pair{String, Tuple{Any, FigSource}}[]
     for source in sources
         if source isa FigSource
             for (k, v) in load(source)
-                if !haskey(figs, k)
+                key = string(k)
+                if !(key in seen)
                     log && @info "loading config property `$k` from `$(typeof(source))`"
-                    figs[string(k)] = (v, source)
+                    push!(seen, key)
+                    entry = Pair{String, Tuple{Any, FigSource}}(key, (v, source))
+                    push!(figs, entry)
                 end
             end
         else
@@ -227,9 +231,12 @@ function load!(store::Store, sources...; name::String="", log::Bool=true)
             # Note: we don't call load here because if you're providing some generic object
             # it needs to iterate key-value configs directly
             for (k, v) in _pairs(source)
-                if !haskey(figs, k)
+                key = string(k)
+                if !(key in seen)
                     log && @info "loading config property `$k` from `$(typeof(src))`"
-                    figs[string(k)] = (v, src)
+                    push!(seen, key)
+                    entry = Pair{String, Tuple{Any, FigSource}}(key, (v, src))
+                    push!(figs, entry)
                 end
             end
         end
@@ -247,9 +254,9 @@ end
 
 # FigSources
 # helper transforms
-struct KeyMap{T} <: FigSource
+struct KeyMap{T, M} <: FigSource
     source::T # any key-value iterator/result of Figgy.load
-    mapping::Any # Function or Dict{String} w/ vals of String or Function
+    mapping::M # Function or Dict{String} w/ vals of String or Function
     select::Bool
 end
 
@@ -270,31 +277,38 @@ The `select` keyword argument indicates that only provided key mappings should b
 config source, thus combining the functionaltiy of [`Figgy.select`](@ref).
 """
 function kmap end
+
 kmap(source, mappings::Pair{String}...; select::Bool=false) = KeyMap(source, Dict(mappings), select)
 kmap(source, mappings::Union{Function, Dict{String}}; select::Bool=false) = KeyMap(source, mappings, select)
 load(x::KeyMap) = x
 
-Base.IteratorSize(::Type{KeyMap{T}}) where {T} = Base.IteratorSize(T)
+Base.IteratorSize(::Type{KeyMap{T, M}}) where {T, M} = Base.IteratorSize(T)
 Base.length(x::KeyMap) = length(x.source)
 
 Base.iterate(x::KeyMap) = _iterate(x, load(x.source))
 Base.iterate(x::KeyMap, (source, st)) = _iterate(x, source, st)
+_keymap_selected(mapping::Function, key) = true
+_keymap_selected(mapping, key) = haskey(mapping, key)
+_keymap_value(mapping::Function, key) = mapping(key)
+_keymap_value(mapping, key) = get(mapping, key, key)
+_keymap_key(key, key2::Function) = key2(key)
+_keymap_key(key, key2) = key === key2 ? key : key2
 function _iterate(x::KeyMap, source, st...)
     state = iterate(source, st...)
     state === nothing && return nothing
     kv, stt = state
     key = kv[1]
-    if x.select && !haskey(x.mapping, key)
+    if x.select && !_keymap_selected(x.mapping, key)
         return _iterate(x, source, stt)
     end
-    key2 = x.mapping isa Function ? x.mapping(key) : get(x.mapping, key, key)
-    kv2 = (key2 isa Function ? key2(key) : key === key2 ? key : key2) => kv[2]
+    key2 = _keymap_value(x.mapping, key)
+    kv2 = _keymap_key(key, key2) => kv[2]
     return kv2, (source, stt)
 end
 
-struct Select{T} <: FigSource
+struct Select{T, S} <: FigSource
     source::T # any key-value iterator/result of Figgy.load
-    set::Any # Function or Set{String}
+    set::S # Function or Set{String}
 end
 
 """
@@ -311,18 +325,18 @@ select(source, keys::String...) = Select(source, Set(keys))
 select(source, filt) = Select(source, filt)
 load(x::Select) = x
 
-Base.IteratorSize(::Type{Select{T}}) where {T} = Base.IteratorSize(T)
+Base.IteratorSize(::Type{Select{T, S}}) where {T, S} = Base.IteratorSize(T)
 Base.length(x::Select) = length(x.source)
 
 Base.iterate(x::Select) = _iterate(x, load(x.source))
 Base.iterate(x::Select, (source, st)) = _iterate(x, source, st)
+_selected(set::Set, key) = key in set
+_selected(f::Function, key) = f(key)
 function _iterate(x::Select, source, st...)
     state = iterate(source, st...)
     state === nothing && return nothing
     kv, stt = state
-    if x.set isa Set && !(kv[1] in x.set)
-        return _iterate(x, source, stt)
-    elseif x.set isa Function && !(x.set(kv[1]))
+    if !_selected(x.set, kv[1])
         return _iterate(x, source, stt)
     end
     return kv, (source, stt)

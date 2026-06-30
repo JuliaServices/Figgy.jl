@@ -239,3 +239,5 @@ end
 end
 
 end # @testset "Figgy"
+
+include("trim_compile_tests.jl")
