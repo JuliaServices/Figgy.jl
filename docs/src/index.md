@@ -63,3 +63,24 @@ See the API Reference page for the section on builtin configuration sources prov
  including program arguments, environment variales, ini files, json, xml, and toml.
 
 See the docs on [`Figgy.FigSource`](@ref) for the simple interface for creating your own custom config source.
+
+## Encrypted config values
+
+`Figgy.Crypt` provides OpenSSL-backed helpers for encrypting individual config values before they are
+stored in files, environment variables, or secret stores. The default profile uses PBKDF2-HMAC-SHA256
+and AES-256-GCM, returning a self-describing `ENC[figgy-v1](...)` envelope:
+
+```julia
+encrypted = Figgy.encrypt("password", "database-password"; key_id="v1")
+plain = Figgy.decrypt(Dict("v1" => "password"), encrypted)
+```
+
+Use explicit `key_id`s when rotating keys so decryptors can select the intended key instead of trying
+multiple keys and hoping failures are deterministic. For Java/Jasypt interoperability, use
+[`Figgy.Crypt.jasypt_config`](@ref) with the generic encrypt/decrypt functions:
+
+```julia
+config = Figgy.Crypt.jasypt_config()
+encrypted = Figgy.encrypt("password", "database-password"; config)
+plain = Figgy.decrypt("password", encrypted; config)
+```

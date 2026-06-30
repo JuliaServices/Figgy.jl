@@ -2,6 +2,34 @@ module Figgy
 
 using TOML
 
+include("crypt.jl")
+
+"""
+    Figgy.encrypt(secret, plaintext; kwargs...)
+
+Encrypt a string or byte vector with Figgy's OpenSSL-backed password-based
+config-value encryption. This is the public convenience wrapper for
+[`Figgy.Crypt.encrypt`](@ref).
+"""
+function encrypt(secret, plaintext; kwargs...)
+    return Crypt.encrypt(secret, plaintext; kwargs...)
+end
+
+"""
+    Figgy.decrypt(secret, encrypted; kwargs...)
+    Figgy.decrypt(keys::AbstractDict, encrypted; kwargs...)
+
+Decrypt an encrypted config value and return UTF-8 text. This is the public
+convenience wrapper for [`Figgy.Crypt.decrypt`](@ref).
+"""
+function decrypt(secret, encrypted::AbstractString; kwargs...)
+    return Crypt.decrypt(secret, encrypted; kwargs...)
+end
+
+function decrypt(keys::AbstractDict, encrypted::AbstractString; kwargs...)
+    return Crypt.decrypt(keys, encrypted; kwargs...)
+end
+
 """
     Figgy.FigSource
 
@@ -241,7 +269,7 @@ program arguments like `--profile` to a common config name like `aws_profile`.
 The `select` keyword argument indicates that only provided key mappings should be "selected" from the
 config source, thus combining the functionaltiy of [`Figgy.select`](@ref).
 """
-
+function kmap end
 kmap(source, mappings::Pair{String}...; select::Bool=false) = KeyMap(source, Dict(mappings), select)
 kmap(source, mappings::Union{Function, Dict{String}}; select::Bool=false) = KeyMap(source, mappings, select)
 load(x::KeyMap) = x

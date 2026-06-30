@@ -22,6 +22,18 @@ The package is registered in the [`General`](https://github.com/JuliaRegistries/
 
 The package is tested against Julia `1.6`, current stable release, and nightly on Linux.
 
+## Encrypted Config Values
+
+`Figgy.Crypt` provides OpenSSL-backed helpers for encrypting individual config values. New values use
+PBKDF2-HMAC-SHA256 plus AES-256-GCM by default and are wrapped as self-describing `ENC[figgy-v1](...)`
+envelopes. A `jasypt_config()` profile is available for Java/Jasypt-compatible AES-256-CBC values while
+keeping the public package API on the generic `Figgy.encrypt` and `Figgy.decrypt` functions.
+
+```julia
+encrypted = Figgy.encrypt("password", "database-password"; key_id="v1")
+plain = Figgy.decrypt(Dict("v1" => "password"), encrypted)
+```
+
 ## Contributing and Questions
 
 Contributions are very welcome, as are feature requests and suggestions. Please open an
