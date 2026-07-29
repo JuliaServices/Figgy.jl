@@ -177,6 +177,59 @@ function Base.get(store::Store, key::String, default=nothing)
     end
 end
 
+"Get the current value for a config item identified by `key`, returns `f()` if not found"
+function Base.get(f::Base.Callable, store::Store, key::String)
+    Base.@lock store.lock begin
+        st = store.store
+        !haskey(st, key) && return f()
+        fig = st[key]
+        @assert !isempty(fig.values)
+        return fig.values[end]
+    end
+end
+
+"""
+    store[key] = value
+
+Manually set the current value for a config item identified by `key`.
+The update is recorded in the config item's history with a `Figgy.NamedSource("manual")` source.
+To load config items from sources in bulk, see [`Figgy.load!`](@ref).
+"""
+function Base.setindex!(store::Store, value, key::String)
+    Base.@lock store.lock begin
+        fig = get!(() -> Fig(key, Any[], FigSource[]), store.store, key)
+        update!(fig, value, NamedSource("manual"))
+    end
+    return store
+end
+
+"Number of config items currently in a `Figgy.Store`"
+Base.length(store::Store) = Base.@lock store.lock length(store.store)
+
+"Whether a `Figgy.Store` contains no config items"
+Base.isempty(store::Store) = Base.@lock store.lock isempty(store.store)
+
+"Snapshot of the config item keys currently in a `Figgy.Store`"
+Base.keys(store::Store) = Base.@lock store.lock collect(keys(store.store))
+
+"Snapshot of the current config item values in a `Figgy.Store`"
+Base.values(store::Store) = Base.@lock store.lock Any[fig.values[end] for fig in values(store.store)]
+
+Base.eltype(::Type{Store}) = Pair{String, Any}
+# SizeUnknown since the store may be mutated concurrently while iterating
+Base.IteratorSize(::Type{Store}) = Base.SizeUnknown()
+
+"Iterate `key => value` pairs of current config items (a snapshot taken when iteration starts)"
+function Base.iterate(store::Store)
+    snap = Base.@lock store.lock Pair{String, Any}[Pair{String, Any}(k, fig.values[end]) for (k, fig) in store.store]
+    return iterate(store, (snap, 1))
+end
+
+function Base.iterate(::Store, (snap, i))
+    i > length(snap) && return nothing
+    return snap[i], (snap, i + 1)
+end
+
 "Get the full `Figgy.Fig` object for a config item identified by `key`, throws `KeyError` if not found; includes history of values/sources"
 function getfig(store::Store, key::String)
     Base.@lock store.lock begin
@@ -233,7 +286,7 @@ function load!(store::Store, sources...; name::String="", log::Bool=true)
             for (k, v) in _pairs(source)
                 key = string(k)
                 if !(key in seen)
-                    log && @info "loading config property `$k` from `$(typeof(src))`"
+                    log && @info "loading config property `$k` from `$src`"
                     push!(seen, key)
                     entry = Pair{String, Tuple{Any, FigSource}}(key, (v, src))
                     push!(figs, entry)
@@ -282,8 +335,9 @@ kmap(source, mappings::Pair{String}...; select::Bool=false) = KeyMap(source, Dic
 kmap(source, mappings::Union{Function, Dict{String}}; select::Bool=false) = KeyMap(source, mappings, select)
 load(x::KeyMap) = x
 
-Base.IteratorSize(::Type{KeyMap{T, M}}) where {T, M} = Base.IteratorSize(T)
-Base.length(x::KeyMap) = length(x.source)
+# SizeUnknown since `select=true` filters keys, so the source length is only an upper bound
+Base.IteratorSize(::Type{<:KeyMap}) = Base.SizeUnknown()
+Base.IteratorEltype(::Type{<:KeyMap}) = Base.EltypeUnknown()
 
 Base.iterate(x::KeyMap) = _iterate(x, load(x.source))
 Base.iterate(x::KeyMap, (source, st)) = _iterate(x, source, st)
@@ -295,15 +349,18 @@ _keymap_key(key, key2::Function) = key2(key)
 _keymap_key(key, key2) = key === key2 ? key : key2
 function _iterate(x::KeyMap, source, st...)
     state = iterate(source, st...)
-    state === nothing && return nothing
-    kv, stt = state
-    key = kv[1]
-    if x.select && !_keymap_selected(x.mapping, key)
-        return _iterate(x, source, stt)
+    while true
+        state === nothing && return nothing
+        kv, stt = state
+        key = kv[1]
+        if x.select && !_keymap_selected(x.mapping, key)
+            state = iterate(source, stt)
+            continue
+        end
+        key2 = _keymap_value(x.mapping, key)
+        kv2 = _keymap_key(key, key2) => kv[2]
+        return kv2, (source, stt)
     end
-    key2 = _keymap_value(x.mapping, key)
-    kv2 = _keymap_key(key, key2) => kv[2]
-    return kv2, (source, stt)
 end
 
 struct Select{T, S} <: FigSource
@@ -325,8 +382,9 @@ select(source, keys::String...) = Select(source, Set(keys))
 select(source, filt) = Select(source, filt)
 load(x::Select) = x
 
-Base.IteratorSize(::Type{Select{T, S}}) where {T, S} = Base.IteratorSize(T)
-Base.length(x::Select) = length(x.source)
+# SizeUnknown since keys are filtered, so the source length is only an upper bound
+Base.IteratorSize(::Type{<:Select}) = Base.SizeUnknown()
+Base.IteratorEltype(::Type{<:Select}) = Base.EltypeUnknown()
 
 Base.iterate(x::Select) = _iterate(x, load(x.source))
 Base.iterate(x::Select, (source, st)) = _iterate(x, source, st)
@@ -334,12 +392,15 @@ _selected(set::Set, key) = key in set
 _selected(f::Function, key) = f(key)
 function _iterate(x::Select, source, st...)
     state = iterate(source, st...)
-    state === nothing && return nothing
-    kv, stt = state
-    if !_selected(x.set, kv[1])
-        return _iterate(x, source, stt)
+    while true
+        state === nothing && return nothing
+        kv, stt = state
+        if !_selected(x.set, kv[1])
+            state = iterate(source, stt)
+            continue
+        end
+        return kv, (source, stt)
     end
-    return kv, (source, stt)
 end
 
 include("sources.jl")

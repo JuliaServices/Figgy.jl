@@ -59,6 +59,22 @@ by doing subsequent loads. This follows the common pattern seen in applications 
 we want to do a prioritized load from a number of potential config sources, then later during normal runtime
 have the ability to tweak specific config values (like production log level) as needed.
 
+In addition to loading, `Figgy.Store` supports the familiar dict-like operations, all threadsafe:
+
+```julia
+store["key"]                     # current value for "key"; throws KeyError if absent
+get(store, "key", "default")     # current value or default
+get(() -> "computed", store, "key") # current value or computed fallback
+store["key"] = "value"           # manually set a value (recorded with a "manual" source)
+haskey(store, "key")
+length(store); isempty(store)
+keys(store); values(store)       # snapshots of current keys/values
+for (k, v) in store; ...; end    # iterate a snapshot of current key-value pairs
+delete!(store, "key")            # remove a config item (including history)
+empty!(store)                    # remove all config items
+Figgy.getfig(store, "key")       # full Figgy.Fig with value/source history
+```
+
 See the API Reference page for the section on builtin configuration sources provided directly by Figgy.jl,
  including program arguments, environment variales, ini files, json, xml, and toml.
 
