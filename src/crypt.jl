@@ -84,7 +84,7 @@ function CipherConfig(;
     algorithm = _normalize_algorithm(algorithm)
     digest = _normalize_digest(digest)
     iterations = Int(iterations)
-    iterations >= 1 || throw(ArgumentError("iterations must be >= 1"))
+    1 <= iterations <= MAX_PARSED_ITERATIONS || throw(ArgumentError("iterations must be between 1 and $MAX_PARSED_ITERATIONS"))
     salt_bytes = Int(salt_bytes)
     salt_bytes >= 1 || throw(ArgumentError("salt_bytes must be >= 1"))
     key_bytes = something(key_bytes, _default_key_bytes(algorithm)) |> Int
@@ -128,15 +128,19 @@ function jasypt_config(; iterations::Integer=50_000)
 end
 
 """
-    Figgy.Crypt.encrypt(secret, plaintext; config=Figgy.Crypt.DEFAULT_CONFIG, key_id=nothing, aad=UInt8[], rng=Random.default_rng(), salt=nothing, iv=nothing, wrap=nothing)
+    Figgy.Crypt.encrypt(secret, plaintext; config=Figgy.Crypt.DEFAULT_CONFIG, key_id=nothing, aad=UInt8[], rng=Random.RandomDevice(), salt=nothing, iv=nothing, wrap=nothing)
 
 Encrypt a string or byte vector with a password/secret string or byte vector.
 
 The default returns a self-describing `ENC[figgy-v1](...)` value. Passing
 `key_id` stores an explicit key identifier in the envelope so decryptors can
 route to the correct key without trying keys by exception.
+
+Random salt/iv bytes are drawn from `Random.RandomDevice()` (the OS
+cryptographically-secure entropy source) by default; pass `rng`, or explicit
+`salt`/`iv` bytes, to override (e.g. for reproducible tests).
 """
-function encrypt(secret, plaintext; config::CipherConfig=DEFAULT_CONFIG, key_id::Union{Nothing,AbstractString}=nothing, aad=UInt8[], rng::AbstractRNG=Random.default_rng(), salt=nothing, iv=nothing, wrap=nothing)
+function encrypt(secret, plaintext; config::CipherConfig=DEFAULT_CONFIG, key_id::Union{Nothing,AbstractString}=nothing, aad=UInt8[], rng::AbstractRNG=Random.RandomDevice(), salt=nothing, iv=nothing, wrap=nothing)
     return _encrypt(secret, _bytes(plaintext), config, key_id, _bytes(aad), rng, salt, iv, wrap)
 end
 
@@ -176,14 +180,13 @@ Decrypt an encrypted string and return raw bytes.
 function decrypt_bytes(secret, encrypted::AbstractString; config::Union{Nothing,CipherConfig}=nothing, aad=UInt8[])
     envelope = parse_envelope(encrypted)
     aad = _bytes(aad)
-    if config === nothing
-        envelope.format == :figgy_v1 || throw(ArgumentError("config is required for non-Figgy encrypted values"))
+    # the self-describing Figgy payload takes precedence over any provided config:
+    # an explicit `ENC[figgy-v1](...)` envelope, or a bare/`ENC(...)` payload that
+    # begins with the Figgy magic bytes (e.g. a value encrypted with `wrap=false`)
+    if envelope.format == :figgy_v1 || _has_figgy_magic(envelope.payload)
         config, salt, iv, ciphertext, tag = _parse_figgy_payload(envelope.payload)
-    elseif config.envelope == :figgy_v1
-        config, salt, iv, ciphertext, tag = _parse_figgy_payload(envelope.payload)
-    elseif config.envelope == :jasypt
-        salt, iv, ciphertext = _parse_salt_iv_ciphertext(envelope.payload, config)
-        tag = UInt8[]
+    elseif config === nothing
+        throw(ArgumentError("config is required for non-Figgy encrypted values"))
     else
         salt, iv, ciphertext = _parse_salt_iv_ciphertext(envelope.payload, config)
         tag = UInt8[]
@@ -191,6 +194,8 @@ function decrypt_bytes(secret, encrypted::AbstractString; config::Union{Nothing,
     key = derive_key(secret, salt; config=config)
     return _evp_decrypt(config, key, iv, ciphertext, tag, aad)
 end
+
+_has_figgy_magic(payload::Vector{UInt8}) = length(payload) >= length(FIGGY_MAGIC) && payload[1:length(FIGGY_MAGIC)] == FIGGY_MAGIC
 
 """
     Figgy.Crypt.derive_key(secret, salt; config=Figgy.Crypt.DEFAULT_CONFIG)
@@ -324,6 +329,10 @@ function _encode_figgy_payload(config::CipherConfig, salt, iv, ciphertext, tag)
     return payload
 end
 
+# upper bound on PBKDF2 iterations accepted from (untrusted) encrypted payloads;
+# prevents a crafted envelope from claiming ~4 billion iterations and stalling decrypt
+const MAX_PARSED_ITERATIONS = 10_000_000
+
 function _parse_figgy_payload(payload::Vector{UInt8})
     minlen = length(FIGGY_MAGIC) + 12
     length(payload) >= minlen || throw(InvalidCiphertextError("Figgy encrypted payload is too short"))
@@ -332,6 +341,7 @@ function _parse_figgy_payload(payload::Vector{UInt8})
     algorithm = _algorithm_from_id(payload[pos])
     digest = _digest_from_id(payload[pos + 1])
     iterations = _read_u32(payload, pos + 2)
+    1 <= iterations <= MAX_PARSED_ITERATIONS || throw(InvalidCiphertextError("Figgy encrypted payload iteration count out of bounds: $iterations"))
     key_bytes = Int(payload[pos + 6])
     salt_bytes = Int(payload[pos + 7])
     iv_bytes = Int(payload[pos + 8])
@@ -476,7 +486,7 @@ function _openssl_error()
     code == 0 && return "OpenSSL returned no error detail"
     buf = Vector{UInt8}(undef, 256)
     ccall((:ERR_error_string_n, LIBCRYPTO), Cvoid, (Culong, Ptr{UInt8}, Csize_t), code, buf, length(buf))
-    return unsafe_string(pointer(buf))
+    return GC.@preserve buf unsafe_string(pointer(buf))
 end
 
 function _cipher(algorithm::Symbol)
