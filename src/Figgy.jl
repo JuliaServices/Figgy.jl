@@ -339,7 +339,7 @@ load(x::KeyMap) = x
 Base.IteratorSize(::Type{<:KeyMap}) = Base.SizeUnknown()
 Base.IteratorEltype(::Type{<:KeyMap}) = Base.EltypeUnknown()
 
-Base.iterate(x::KeyMap) = _iterate(x, load(x.source))
+Base.iterate(x::KeyMap) = _iterate(x, _pairs(load(x.source)))
 Base.iterate(x::KeyMap, (source, st)) = _iterate(x, source, st)
 _keymap_selected(mapping::Function, key) = true
 _keymap_selected(mapping, key) = haskey(mapping, key)
@@ -386,7 +386,7 @@ load(x::Select) = x
 Base.IteratorSize(::Type{<:Select}) = Base.SizeUnknown()
 Base.IteratorEltype(::Type{<:Select}) = Base.EltypeUnknown()
 
-Base.iterate(x::Select) = _iterate(x, load(x.source))
+Base.iterate(x::Select) = _iterate(x, _pairs(load(x.source)))
 Base.iterate(x::Select, (source, st)) = _iterate(x, source, st)
 _selected(set::Set, key) = key in set
 _selected(f::Function, key) = f(key)
