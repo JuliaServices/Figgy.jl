@@ -97,6 +97,20 @@ end
     @test sort(collect(Figgy.kmap(src, "k" => "kk"))) == ["k2" => "v2", "k3" => "v3", "kk" => "v"]
     @test Base.IteratorSize(typeof(Figgy.select(src, "k"))) == Base.SizeUnknown()
     @test Base.IteratorSize(typeof(Figgy.kmap(src, "k" => "kk"))) == Base.SizeUnknown()
+    # Pair and NamedTuple sources use the same key-value normalization as load!.
+    for source in ("key" => "value", (key="value",))
+        key = source isa Pair ? "key" : :key
+        @test collect(Figgy.kmap(source, string)) == ["key" => "value"]
+        @test collect(Figgy.select(source, k -> k == key)) == [key => "value"]
+        @test isempty(collect(Figgy.select(source, _ -> false)))
+        mapped = Figgy.kmap(source, k -> uppercase(string(k)))
+        selected = Figgy.select(mapped, "KEY")
+        store = Figgy.Store()
+        Figgy.load!(store, selected; log=false)
+        @test store["KEY"] == "value"
+    end
+    @test isempty(collect(Figgy.kmap(NamedTuple(), string)))
+    @test isempty(collect(Figgy.select(NamedTuple(), _ -> true)))
     # filtering out many consecutive keys used to blow the stack via recursion
     bigsrc = Dict("key$i" => "v" for i = 1:200_000)
     @test collect(Figgy.select(bigsrc, "nomatch")) == []
