@@ -169,6 +169,18 @@ end
     # the self-describing figgy envelope wins over a mismatched explicit config
     @test Figgy.decrypt("secret", enc; config=jasypt) == "hello"
 
+    # A forged payload cannot lower its own authentication: no short GCM tags,
+    # and CBC (no tag at all) only with an explicit CBC config.
+    @test_throws ArgumentError Figgy.Crypt.CipherConfig(; tag_bytes=8)
+    short_tag = copy(Figgy.Crypt.parse_envelope(enc).payload)
+    short_tag[length(Figgy.Crypt.FIGGY_MAGIC) + 10] = 0x01
+    short_tag = short_tag[1:end-15]
+    @test_throws Figgy.Crypt.InvalidCiphertextError Figgy.decrypt("secret", "ENC[figgy-v1]($(base64encode(short_tag)))")
+    cbc = Figgy.Crypt.CipherConfig(; algorithm=:aes_256_cbc, iterations=1_000)
+    cbc_enc = Figgy.encrypt("secret", "hello"; config=cbc)
+    @test_throws Figgy.Crypt.InvalidCiphertextError Figgy.decrypt("secret", cbc_enc)
+    @test Figgy.decrypt("secret", cbc_enc; config=cbc) == "hello"
+
     # PBKDF2 iteration counts are bounded
     @test_throws ArgumentError Figgy.Crypt.CipherConfig(; iterations=0)
     @test_throws ArgumentError Figgy.Crypt.CipherConfig(; iterations=20_000_000)
