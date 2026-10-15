@@ -69,6 +69,8 @@ const EVP_MAX_BLOCK_LENGTH = 32
 const EVP_CTRL_GCM_SET_IVLEN = Cint(0x9)
 const EVP_CTRL_GCM_GET_TAG = Cint(0x10)
 const EVP_CTRL_GCM_SET_TAG = Cint(0x11)
+# shorter GCM tags can be guessed (NIST SP 800-38D: 96 bits minimum for general use)
+const MIN_GCM_TAG_BYTES = 12
 
 function CipherConfig(;
     algorithm::Symbol=:aes_256_gcm,
@@ -93,7 +95,8 @@ function CipherConfig(;
     iv_bytes >= 1 || throw(ArgumentError("iv_bytes must be >= 1"))
     tag_bytes = something(tag_bytes, _default_tag_bytes(algorithm)) |> Int
     if _is_gcm(algorithm)
-        1 <= tag_bytes <= 16 || throw(ArgumentError("AES-GCM tag_bytes must be between 1 and 16"))
+        MIN_GCM_TAG_BYTES <= tag_bytes <= 16 ||
+            throw(ArgumentError("AES-GCM tag_bytes must be between $MIN_GCM_TAG_BYTES and 16"))
     else
         tag_bytes == 0 || throw(ArgumentError("AES-CBC does not use an authentication tag"))
         iv_bytes == 16 || throw(ArgumentError("AES-CBC requires a 16-byte IV"))
@@ -184,7 +187,12 @@ function decrypt_bytes(secret, encrypted::AbstractString; config::Union{Nothing,
     # an explicit `ENC[figgy-v1](...)` envelope, or a bare/`ENC(...)` payload that
     # begins with the Figgy magic bytes (e.g. a value encrypted with `wrap=false`)
     if envelope.format == :figgy_v1 || _has_figgy_magic(envelope.payload)
-        config, salt, iv, ciphertext, tag = _parse_figgy_payload(envelope.payload)
+        parsed, salt, iv, ciphertext, tag = _parse_figgy_payload(envelope.payload)
+        # The payload names its own cipher, so whoever supplies it must not be able
+        # to choose unauthenticated CBC: that needs an explicit CBC `config`.
+        _is_gcm(parsed.algorithm) || (config !== nothing && !_is_gcm(config.algorithm)) ||
+            throw(InvalidCiphertextError("AES-CBC Figgy payloads require an explicit AES-CBC config"))
+        config = parsed
     elseif config === nothing
         throw(ArgumentError("config is required for non-Figgy encrypted values"))
     else
@@ -356,7 +364,12 @@ function _parse_figgy_payload(payload::Vector{UInt8})
     ct_start = iv_start + iv_bytes
     ciphertext = payload[ct_start:ct_start + ciphertext_bytes - 1]
     tag = payload[ct_start + ciphertext_bytes:expected]
-    config = CipherConfig(; algorithm=algorithm, digest=digest, iterations=iterations, salt_bytes=salt_bytes, iv_bytes=iv_bytes, tag_bytes=tag_bytes, key_bytes=key_bytes, envelope=:figgy_v1)
+    config = try
+        CipherConfig(; algorithm=algorithm, digest=digest, iterations=iterations, salt_bytes=salt_bytes, iv_bytes=iv_bytes, tag_bytes=tag_bytes, key_bytes=key_bytes, envelope=:figgy_v1)
+    catch err
+        err isa ArgumentError || rethrow()
+        throw(InvalidCiphertextError("invalid Figgy encrypted payload parameters: $(err.msg)"))
+    end
     return config, salt, iv, ciphertext, tag
 end
 
