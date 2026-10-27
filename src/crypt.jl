@@ -342,7 +342,7 @@ end
 const MAX_PARSED_ITERATIONS = 10_000_000
 
 function _parse_figgy_payload(payload::Vector{UInt8})
-    minlen = length(FIGGY_MAGIC) + 12
+    minlen = length(FIGGY_MAGIC) + 14 # header: magic, ids, iterations, sizes, ciphertext length
     length(payload) >= minlen || throw(InvalidCiphertextError("Figgy encrypted payload is too short"))
     payload[1:length(FIGGY_MAGIC)] == FIGGY_MAGIC || throw(InvalidCiphertextError("invalid Figgy encrypted payload header"))
     pos = length(FIGGY_MAGIC) + 1

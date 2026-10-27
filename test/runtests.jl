@@ -188,6 +188,10 @@ end
     crafted = copy(Figgy.Crypt.parse_envelope(enc).payload)
     crafted[12:15] .= 0xff
     @test_throws Figgy.Crypt.InvalidCiphertextError Figgy.decrypt("secret", "ENC[figgy-v1]($(base64encode(crafted)))")
+    # payloads cut short inside the 23-byte header are invalid ciphertext
+    for n in 20:23
+        @test_throws Figgy.Crypt.InvalidCiphertextError Figgy.decrypt("secret", "ENC[figgy-v1]($(base64encode(envelope.payload[1:n])))")
+    end
 end
 
 @testset "Figgy.ProgramArguments" begin
@@ -231,6 +235,9 @@ end
     @test pa.args == ["a" => "true"]
     # empty long-form key is invalid
     @test_throws ArgumentError Figgy.ProgramArguments(; args=["--=value"])
+    # short-form flags may be non-ASCII
+    @test Figgy.ProgramArguments(; args=["-éa"]).args == ["é" => "true", "a" => "true"]
+    @test Figgy.ProgramArguments("é"; args=["-éval"]).args == ["é" => "val"]
 end
 
 @testset "Figgy.EnvironmentVariables" begin
@@ -391,6 +398,24 @@ end
     @test x.figs["alsoempty"] == ""
     @test x.figs["blank"] == ""
     @test x.figs["nested"] == Dict{String, Any}("inner" => "value")
+
+    # entity references are decoded; CDATA sections are kept verbatim
+    x = Figgy.XmlObject("""
+    <root>
+        <escaped>a&amp;b &lt;c&gt; &quot;d&apos; &#65;&#x42;</escaped>
+        <cdata>
+            <![CDATA[ p<ss>&amp; ]]>
+        </cdata>
+        <mixed>x<![CDATA[]]>]]&gt;y</mixed>
+        <unknown>a & b &bogus; &#xD800; &#9999999999;</unknown>
+    </root>
+    """)
+    @test x.figs["escaped"] == "a&b <c> \"d' AB"
+    @test x.figs["cdata"] == " p<ss>&amp; "
+    @test x.figs["mixed"] == "x]]>y"
+    @test x.figs["unknown"] == "a & b &bogus; &#xD800; &#9999999999;"
+    # CDATA outside a text value (mixed content) is ignored
+    @test Figgy.XmlObject("<![CDATA[>]]><root><a>1</a><![CDATA[x>y]]></root>").figs == Dict{String, Any}("a" => "1")
 
     # a file path can be provided instead of contents
     mktemp() do path, io
