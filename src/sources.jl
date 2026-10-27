@@ -48,13 +48,13 @@ function ProgramArguments(requiredArgs::String...; args=ARGS)
                 # short-form with value
                 push!(parsed, lstrip(arg, '-') => args[i + 1])
                 i += 1
-            elseif length(arg) >= 2 && arg[2:2] in required
+            elseif string(arg[2]) in required
                 # short-form with required value that is concatenated with arg like: -ofoo
-                push!(parsed, arg[2:2] => arg[3:end])
+                push!(parsed, string(arg[2]) => arg[nextind(arg, 2):end])
             else
-                # short-form boolean falgs
-                for j = 2:length(arg)
-                    push!(parsed, arg[j:j] => "true")
+                # short-form boolean flags
+                for c in arg[2:end]
+                    push!(parsed, string(c) => "true")
                 end
             end
         else
@@ -379,7 +379,9 @@ can be a path to an xml file, a `String` which is itself xml data, or a
 `Vector{UInt8}` of xml data.
 Xml declarations (`<?xml ...?>`), comments (`<!-- ... -->`), and doctypes
 are skipped; self-closing tags like `<key/>` are parsed as `key => ""`.
-Element text values have surrounding whitespace trimmed.
+Element text values have surrounding whitespace trimmed, entity references
+(`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, `&#NN;`, `&#xHH;`) decoded, and
+`<![CDATA[...]]>` sections kept verbatim.
 The xml is expected to be a xml object where the key-values will be considered
 key-value config pairs. The `path` argument is optional and is used to
 specify a nested path to an object that should be used for config pairs. So a
@@ -423,6 +425,46 @@ end
 
 _xml_whitespace(b) = b == UInt8(' ') || b == UInt8('\t') || b == UInt8('\n') || b == UInt8('\r')
 
+function _xml_startswith(buf, pos, len, prefix::String)
+    pos + ncodeunits(prefix) - 1 <= len || return false
+    for (i, c) in enumerate(codeunits(prefix))
+        getbyte(buf, pos + i - 1) == c || return false
+    end
+    return true
+end
+
+# write the character of the entity reference starting with the `&` at `pos` to `io`
+# and return the position after it; an unrecognized reference is written as a literal `&`
+function _xml_entity!(io, buf, pos, len)
+    stop = pos + 1
+    while stop <= len
+        b = getbyte(buf, stop)
+        (b == UInt8(';') || b == UInt8('<') || b == UInt8('&') || _xml_whitespace(b)) && break
+        stop += 1
+    end
+    if stop <= len && getbyte(buf, stop) == UInt8(';')
+        c = _xml_entity_char(String(buf[pos + 1:stop - 1]))
+        if c !== nothing
+            write(io, c)
+            return stop + 1
+        end
+    end
+    write(io, UInt8('&'))
+    return pos + 1
+end
+
+function _xml_entity_char(name::String)
+    name == "amp" && return '&'
+    name == "lt" && return '<'
+    name == "gt" && return '>'
+    name == "quot" && return '"'
+    name == "apos" && return '\''
+    startswith(name, "#") || return nothing
+    u = startswith(name, "#x") ? tryparse(UInt32, name[3:end]; base=16) : tryparse(UInt32, name[2:end]; base=10)
+    (u === nothing || !isvalid(Char, u)) && return nothing
+    return Char(u)
+end
+
 # skip whitespace, xml declarations/processing instructions (`<?...?>`),
 # comments (`<!--...-->`), and doctypes (`<!...>`);
 # returns the position of the next content byte
@@ -456,7 +498,7 @@ function _skip_xml_misc(buf, pos, len)
                 end
                 pos += 1
             end
-        elseif b == UInt8('<') && pos < len && getbyte(buf, pos + 1) == UInt8('!')
+        elseif b == UInt8('<') && pos < len && getbyte(buf, pos + 1) == UInt8('!') && !_xml_startswith(buf, pos, len, "<![CDATA[")
             # doctype or other declaration; skip past `>`
             pos += 2
             while true
@@ -512,7 +554,7 @@ function readxml(buf, pos, len, b)
     selfclosing && return pos, key => ""
     pos = _skip_xml_misc(buf, pos, len)
     b = getbyte(buf, pos)
-    if b == UInt8('<') && pos < len && getbyte(buf, pos + 1) != UInt8('/')
+    if b == UInt8('<') && pos < len && getbyte(buf, pos + 1) != UInt8('/') && !_xml_startswith(buf, pos, len, "<![CDATA[")
         # nested object
         val = Dict{String, Any}()
         while true
@@ -527,26 +569,38 @@ function readxml(buf, pos, len, b)
         end
         return pos, key => val
     else
-        # string value; leading whitespace was skipped above and
-        # trailing whitespace before the closing tag is trimmed
-        strstartpos = pos
-        strlen = 0
+        # string value; leading whitespace was skipped above and trailing
+        # whitespace outside CDATA sections before the closing tag is trimmed
+        io = IOBuffer()
         vallen = 0
         while true
             pos > len && throw(EOFError())
             b = getbyte(buf, pos)
-            if b == UInt8('<')
+            if b == UInt8('<') && _xml_startswith(buf, pos, len, "<![CDATA[")
+                pos += 9
+                while !_xml_startswith(buf, pos, len, "]]>")
+                    pos > len && throw(EOFError())
+                    write(io, getbyte(buf, pos))
+                    pos += 1
+                end
+                pos += 3
+                vallen = position(io)
+                continue
+            elseif b == UInt8('<')
                 pos += 1
                 (pos <= len && getbyte(buf, pos) == UInt8('/')) || throw(ArgumentError("malformed xml; expected closing tag for key: `$key`"))
                 pos = _match_closing_tag(buf, pos + 1, len, keystartpos, keylen, key)
                 break
+            elseif b == UInt8('&')
+                pos = _xml_entity!(io, buf, pos, len)
+                vallen = position(io)
+                continue
             end
-            strlen += 1
-            _xml_whitespace(b) || (vallen = strlen)
+            write(io, b)
+            _xml_whitespace(b) || (vallen = position(io))
             pos += 1
         end
-        str = unsafe_string(pointer(buf, strstartpos), vallen)
-        return pos, key => str
+        return pos, key => String(resize!(take!(io), vallen))
     end
 end
 
