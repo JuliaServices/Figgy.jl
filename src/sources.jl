@@ -453,6 +453,18 @@ function _xml_entity!(io, buf, pos, len)
     return pos + 1
 end
 
+# read the CDATA section at `pos`, writing its content to `io` unless `io === nothing`;
+# returns the position after the closing `]]>`
+function _xml_cdata!(io, buf, pos, len)
+    pos += 9 # skip `<![CDATA[`
+    while !_xml_startswith(buf, pos, len, "]]>")
+        pos > len && throw(EOFError())
+        io === nothing || write(io, getbyte(buf, pos))
+        pos += 1
+    end
+    return pos + 3
+end
+
 function _xml_entity_char(name::String)
     name == "amp" && return '&'
     name == "lt" && return '<'
@@ -466,9 +478,10 @@ function _xml_entity_char(name::String)
 end
 
 # skip whitespace, xml declarations/processing instructions (`<?...?>`),
-# comments (`<!--...-->`), and doctypes (`<!...>`);
+# comments (`<!--...-->`), doctypes (`<!...>`), and CDATA sections outside text
+# values; with `keepcdata`, stop at a CDATA section since it starts a text value;
 # returns the position of the next content byte
-function _skip_xml_misc(buf, pos, len)
+function _skip_xml_misc(buf, pos, len, keepcdata::Bool=false)
     while true
         while true
             pos > len && throw(EOFError())
@@ -498,7 +511,10 @@ function _skip_xml_misc(buf, pos, len)
                 end
                 pos += 1
             end
-        elseif b == UInt8('<') && pos < len && getbyte(buf, pos + 1) == UInt8('!') && !_xml_startswith(buf, pos, len, "<![CDATA[")
+        elseif b == UInt8('<') && _xml_startswith(buf, pos, len, "<![CDATA[")
+            keepcdata && return pos
+            pos = _xml_cdata!(nothing, buf, pos, len)
+        elseif b == UInt8('<') && pos < len && getbyte(buf, pos + 1) == UInt8('!')
             # doctype or other declaration; skip past `>`
             pos += 2
             while true
@@ -552,7 +568,7 @@ function readxml(buf, pos, len, b)
     pos += 1
     # self-closing tag like `<key/>` has an empty string value
     selfclosing && return pos, key => ""
-    pos = _skip_xml_misc(buf, pos, len)
+    pos = _skip_xml_misc(buf, pos, len, true)
     b = getbyte(buf, pos)
     if b == UInt8('<') && pos < len && getbyte(buf, pos + 1) != UInt8('/') && !_xml_startswith(buf, pos, len, "<![CDATA[")
         # nested object
@@ -577,13 +593,7 @@ function readxml(buf, pos, len, b)
             pos > len && throw(EOFError())
             b = getbyte(buf, pos)
             if b == UInt8('<') && _xml_startswith(buf, pos, len, "<![CDATA[")
-                pos += 9
-                while !_xml_startswith(buf, pos, len, "]]>")
-                    pos > len && throw(EOFError())
-                    write(io, getbyte(buf, pos))
-                    pos += 1
-                end
-                pos += 3
+                pos = _xml_cdata!(io, buf, pos, len)
                 vallen = position(io)
                 continue
             elseif b == UInt8('<')

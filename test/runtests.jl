@@ -414,6 +414,8 @@ end
     @test x.figs["cdata"] == " p<ss>&amp; "
     @test x.figs["mixed"] == "x]]>y"
     @test x.figs["unknown"] == "a & b &bogus; &#xD800; &#9999999999;"
+    # CDATA outside a text value (mixed content) is ignored
+    @test Figgy.XmlObject("<![CDATA[>]]><root><a>1</a><![CDATA[x>y]]></root>").figs == Dict{String, Any}("a" => "1")
 
     # a file path can be provided instead of contents
     mktemp() do path, io
