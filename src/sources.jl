@@ -113,6 +113,9 @@ struct IniFile <: FigSource
     section::String
 end
 
+# `file` may hold the INI contents themselves (secrets included); print only a path
+Base.show(io::IO, x::IniFile) = print(io, "Figgy.IniFile(", occursin('\n', x.file) ? "<contents>" : repr(x.file), ", ", repr(x.section), ")")
+
 # convenience interface for parsing a specific section of an INI file
 # returning key-values of that section
 function load(ini::IniFile)
@@ -176,6 +179,8 @@ like: `Figgy.JsonObject(json, "nested.level2")`.
 struct JsonObject <: FigSource
     figs::Dict{String, Any}
 end
+
+Base.show(io::IO, x::JsonObject) = print(io, "Figgy.JsonObject(", _entries(length(x.figs)), ")")
 
 load(x::JsonObject) = x.figs
 
@@ -405,6 +410,8 @@ struct XmlObject <: FigSource
     figs::Dict{String, Any}
 end
 
+Base.show(io::IO, x::XmlObject) = print(io, "Figgy.XmlObject(", _entries(length(x.figs)), ")")
+
 load(x::XmlObject) = x.figs
 
 function XmlObject(xml::Union{AbstractString, AbstractVector{UInt8}}, path::String="")
@@ -617,6 +624,8 @@ end
 struct TomlObject <: FigSource
     figs::Dict{String, Any}
 end
+
+Base.show(io::IO, x::TomlObject) = print(io, "Figgy.TomlObject(", _entries(length(x.figs)), ")")
 
 load(x::TomlObject) = x.figs
 

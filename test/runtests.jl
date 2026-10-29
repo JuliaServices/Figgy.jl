@@ -10,7 +10,22 @@ using Base64, Figgy, Test
 
     Figgy.load!(store, "key" => "value")
     @test store["key"] == "value"
-    @test sprint(show, store) == "Figgy.Store:\n  key: `value` from `Figgy.ObjectSource(Pair{String, String})`, 1 entry"
+    # values (often secrets) stay out of printed stores, including through their sources
+    @test sprint(show, store) == "Figgy.Store:\n  key from `Figgy.ObjectSource(Pair{String, String})`, 1 entry"
+    secrets = Figgy.Store()
+    Figgy.load!(secrets, Figgy.TomlObject("password = \"hunter2\""); log=false)
+    Figgy.load!(secrets, Figgy.JsonObject("{\"token\": \"hunter3\"}"); log=false)
+    Figgy.load!(secrets, Figgy.XmlObject("<root><key>hunter4</key></root>"); log=false)
+    Figgy.load!(secrets, Figgy.IniFile("[s]\napi_key = hunter5\n", "s"); log=false)
+    Figgy.load!(secrets, Figgy.kmap(Dict("pin" => "hunter6"), "pin" => "PIN"); log=false)
+    Figgy.load!(secrets, Figgy.select("code" => "hunter7", "code"); log=false)
+    shown = sprint(show, secrets)
+    @test !occursin("hunter", shown)
+    @test occursin("password from `Figgy.TomlObject(1 entry)`", shown)
+    @test occursin("api_key from `Figgy.IniFile(<contents>, \"s\")`", shown)
+    @test occursin("PIN from `Figgy.kmap(Dict{String, String})`", shown)
+    @test occursin("code from `Figgy.select(Pair{String, String})`", shown)
+    @test sprint(show, Figgy.IniFile("/etc/app.ini", "s")) == "Figgy.IniFile(\"/etc/app.ini\", \"s\")"
     fig = Figgy.getfig(store, "key")
     @test fig[] == "value"
     Figgy.update!(fig, "value2", Figgy.NamedSource("manual"))

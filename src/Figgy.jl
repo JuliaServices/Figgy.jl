@@ -107,6 +107,7 @@ end
     Figgy.Store()
 
 A threadsafe config store. Tracks config item history as they are updated over time.
+`show(store)` lists each key with its current source, never its value.
 Configs are loaded by calling `Figgy.load!(::Figgy.Store, sources...)`, where `sources`
 is a list of `Figgy.FigSource` objects, including `Figgy.ProgramArguments`, `Figgy.EnvironmentVariables`,
 `Figgy.IniFile`, `Figgy.JsonObject`, `Figgy.XmlObject`, etc. Loading directly from `Dict`, `NamedTuple`,
@@ -119,6 +120,10 @@ end
 
 Store() = Store(ReentrantLock(), Dict{String, Fig}())
 
+_entries(n) = n == 1 ? "1 entry" : "$n entries"
+
+# Prints keys and sources only: stores often hold secrets, and printed stores end up in logs.
+# Built-in sources print without their values too.
 function Base.show(io::IO, store::Store)
     Base.@lock store.lock begin
         print(io, "Figgy.Store:")
@@ -126,8 +131,7 @@ function Base.show(io::IO, store::Store)
             print(io, "\nNo entries")
         end
         for (k, fig) in store.store
-            print(io, "\n  $k:")
-            print(io, " `$(fig.values[end])` from `$(fig.sources[end])`, $(length(fig.values) == 1 ? "1 entry" : "$(length(fig.values)) entries")")
+            print(io, "\n  $k from `$(fig.sources[end])`, $(_entries(length(fig.values)))")
         end
     end
 end
@@ -332,6 +336,9 @@ function kmap end
 kmap(source, mappings::Pair{String}...; select::Bool=false) = KeyMap(source, Dict(mappings), select)
 kmap(source, mappings::Union{Function, Dict{String}}; select::Bool=false) = KeyMap(source, mappings, select)
 load(x::KeyMap) = x
+# a plain key-value source (Dict, NamedTuple, ...) prints as its type, never its values
+_showsource(x) = x isa FigSource ? x : typeof(x)
+Base.show(io::IO, x::KeyMap) = print(io, "Figgy.kmap(", _showsource(x.source), ")")
 
 # SizeUnknown since `select=true` filters keys, so the source length is only an upper bound
 Base.IteratorSize(::Type{<:KeyMap}) = Base.SizeUnknown()
@@ -379,6 +386,7 @@ function select end
 select(source, keys::String...) = Select(source, Set(keys))
 select(source, filt) = Select(source, filt)
 load(x::Select) = x
+Base.show(io::IO, x::Select) = print(io, "Figgy.select(", _showsource(x.source), ")")
 
 # SizeUnknown since keys are filtered, so the source length is only an upper bound
 Base.IteratorSize(::Type{<:Select}) = Base.SizeUnknown()
