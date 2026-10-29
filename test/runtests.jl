@@ -44,6 +44,13 @@ end
     @test sort(values(store)) == ["1", "2"]
     @test sort(collect(store); by=first) == ["a" => "1", "b" => "2"]
     @test get(() -> "computed", store, "a") == "1"
+    # the default runs without the store lock, so it may read the store from another task
+    # (a separate store keeps a regression from blocking the rest of this testset)
+    other = Figgy.Store()
+    Figgy.load!(other, "a" => "1"; log=false)
+    t = @async get(() -> fetch(Threads.@spawn get(other, "a", nothing)), other, "missing")
+    @test timedwait(() -> istaskdone(t), 10) == :ok
+    istaskdone(t) && @test fetch(t) == "1"
 
     store["c"] = "3"
     @test store["c"] == "3"
