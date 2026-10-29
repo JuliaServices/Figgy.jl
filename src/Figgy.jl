@@ -177,15 +177,13 @@ function Base.get(store::Store, key::String, default=nothing)
     end
 end
 
-"Get the current value for a config item identified by `key`, returns `f()` if not found"
+"Get the current value for a config item identified by `key`, returns `f()` if not found; `f` runs without the store lock held"
 function Base.get(f::Base.Callable, store::Store, key::String)
-    Base.@lock store.lock begin
-        st = store.store
-        !haskey(st, key) && return f()
-        fig = st[key]
-        @assert !isempty(fig.values)
-        return fig.values[end]
+    found, value = Base.@lock store.lock begin
+        fig = get(store.store, key, nothing)
+        fig === nothing ? (false, nothing) : (true, fig.values[end])
     end
+    return found ? value : f()
 end
 
 """
