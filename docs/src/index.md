@@ -20,7 +20,7 @@ to load the package.
 ## Overview 
 
 The Figgy.jl package provides a threadsafe configuration manager that allows respecting a priority
-of config sources and updating config values over time while tracking history. It offers support for
+of config sources and updating config values over time while tracking recent history. It offers support for
 a number of simple, builtin configuration source types with zero dependencies. The API is
 straightforward:
 
@@ -72,7 +72,7 @@ keys(store); values(store)       # snapshots of current keys/values
 for (k, v) in store; ...; end    # iterate a snapshot of current key-value pairs
 delete!(store, "key")            # remove a config item (including history)
 empty!(store)                    # remove all config items
-Figgy.getfig(store, "key")       # full Figgy.Fig with value/source history
+Figgy.getfig(store, "key")       # snapshot Figgy.Fig with recent value/source history
 ```
 
 See the API Reference page for the section on builtin configuration sources provided directly by Figgy.jl,

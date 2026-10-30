@@ -28,8 +28,11 @@ using Base64, Figgy, Test
     @test sprint(show, Figgy.IniFile("/etc/app.ini", "s")) == "Figgy.IniFile(\"/etc/app.ini\", \"s\")"
     fig = Figgy.getfig(store, "key")
     @test fig[] == "value"
-    Figgy.update!(fig, "value2", Figgy.NamedSource("manual"))
-    @test fig[] == "value2"
+    # getfig returns a snapshot: store updates don't reach it, and changing it doesn't reach the store
+    store["key"] = "value2"
+    @test fig[] == "value"
+    @test Figgy.getfig(store, "key")[] == "value2"
+    Figgy.update!(fig, "other", Figgy.NamedSource("manual"))
     @test store["key"] == "value2"
     
     Figgy.load!(store, (key2="value3",); name="nt")
@@ -74,7 +77,14 @@ end
     @test fig.sources[end] == Figgy.NamedSource("manual")
     store["c"] = "4"
     @test store["c"] == "4"
-    @test length(fig.values) == 2
+    @test length(Figgy.getfig(store, "c").values) == 2
+    # history keeps only the most recent values
+    for i in 1:100
+        store["c"] = string(i)
+    end
+    fig = Figgy.getfig(store, "c")
+    @test length(fig.values) == length(fig.sources) == Figgy.MAX_HISTORY
+    @test fig.values == [string(i) for i in (101 - Figgy.MAX_HISTORY):100]
 end
 
 @testset "Figgy.kmap" begin

@@ -79,8 +79,9 @@ end
 """
     Figgy.Fig(key, values, sources)
 
-Represents a unique config item `key` and its history of values from various sources.
-Used by `Figgy.Store` to track config items.
+Represents a unique config item `key` and its recent history of values from various sources.
+Used by `Figgy.Store` to track config items; a store keeps the most recent
+`Figgy.MAX_HISTORY` values and sources for each key.
 """
 struct Fig
     key::String
@@ -91,9 +92,18 @@ struct Fig
     sources::Vector{FigSource}
 end
 
-function update!(x::Fig, value, source)
+"Number of values (and sources) a `Figgy.Store` keeps per config item; older ones are dropped."
+const MAX_HISTORY = 16
+
+# inlined so callers passing an `Any` value stay statically dispatched under juliac --trim
+@inline function update!(x::Fig, value, source)
     push!(x.values, value)
     push!(x.sources, source)
+    # bounded, so reloads (e.g. rotating credentials) neither grow memory nor keep old secrets alive
+    if length(x.values) > MAX_HISTORY
+        popfirst!(x.values)
+        popfirst!(x.sources)
+    end
     return x
 end
 
@@ -106,7 +116,7 @@ end
 """
     Figgy.Store()
 
-A threadsafe config store. Tracks config item history as they are updated over time.
+A threadsafe config store. Tracks the recent history of config items as they are updated over time.
 `show(store)` lists each key with its current source, never its value.
 Configs are loaded by calling `Figgy.load!(::Figgy.Store, sources...)`, where `sources`
 is a list of `Figgy.FigSource` objects, including `Figgy.ProgramArguments`, `Figgy.EnvironmentVariables`,
@@ -232,12 +242,19 @@ function Base.iterate(::Store, (snap, i))
     return snap[i], (snap, i + 1)
 end
 
-"Get the full `Figgy.Fig` object for a config item identified by `key`, throws `KeyError` if not found; includes history of values/sources"
+"""
+    Figgy.getfig(store, key) -> Figgy.Fig
+
+Get a snapshot of the `Figgy.Fig` for the config item identified by `key`, including its recent
+history of values/sources; throws `KeyError` if not found. Later updates to `store` don't change
+the snapshot, and changing the snapshot doesn't change `store`.
+"""
 function getfig(store::Store, key::String)
     Base.@lock store.lock begin
         st = store.store
         !haskey(st, key) && throw(KeyError(key))
-        return st[key]
+        fig = st[key]
+        return Fig(fig.key, copy(fig.values), copy(fig.sources))
     end
 end
 
