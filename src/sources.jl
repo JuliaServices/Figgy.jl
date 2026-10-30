@@ -9,7 +9,11 @@ A FigSource that parses command line arguments to a Julia program.
 Specifically, arguments of the following form are parsed:
   * `--key=value`, long-form argument that is parsed as `key => value`;
     the value may itself contain `=` characters (only the first `=` delimits)
-  * `--key`, long-form "flag" argument that is parsed as `key => "true"`
+  * `--key value`, long-form argument that is parsed as `key => value` when the
+    next argument doesn't start with `-`
+  * `--key`, long-form "flag" argument that is parsed as `key => "true"` when it is
+    last or the next argument starts with `-`; write `--key=true` for a flag that is
+    followed by a non-option argument
   * `-x`, "flag" argument that is parsed as `x => "true"`
   * `-abc`, multiple flag arguments that result in multiple key value pairs
     of the form `a => "true", b => "true", c => "true"`
@@ -39,6 +43,10 @@ function ProgramArguments(requiredArgs::String...; args=ARGS)
             isempty(key) && throw(ArgumentError("invalid long-form program argument: `$arg`, expected of the form `--key=value` or `--key`"))
             if length(spl) == 2
                 push!(parsed, key => spl[2])
+            elseif i < length(args) && !startswith(args[i + 1], "-")
+                # long-form with the value in the next argument, like `--port 8080`
+                push!(parsed, key => args[i + 1])
+                i += 1
             else
                 # long-form boolean flag like `--verbose`
                 push!(parsed, key => "true")

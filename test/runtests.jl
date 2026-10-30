@@ -249,6 +249,10 @@ end
     # long-form boolean flags
     pa = Figgy.ProgramArguments(; args=["--verbose", "--key=value"])
     @test pa.args == ["verbose" => "true", "key" => "value"]
+    @test Figgy.ProgramArguments(; args=["--key=value", "--verbose"]).args == ["key" => "value", "verbose" => "true"]
+    # long-form values may be the next argument; parsing continues after them
+    pa = Figgy.ProgramArguments(; args=["--port", "8080", "--host=h", "-x", "y", "--verbose", "--", "--rest"])
+    @test pa.args == ["port" => "8080", "host" => "h", "x" => "y", "verbose" => "true"]
     # `--` ends option parsing
     pa = Figgy.ProgramArguments(; args=["--key=value", "--", "--notparsed=1"])
     @test pa.args == ["key" => "value"]
