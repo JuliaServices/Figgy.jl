@@ -546,11 +546,14 @@ function _skip_xml_misc(buf, pos, len, keepcdata::Bool=false)
     end
 end
 
-# match the element name at `keystartpos` (of length `keylen`) followed by `>`,
-# starting at `pos`; used for validating closing tags
+# match the element name at `keystartpos` (of length `keylen`) followed by optional
+# whitespace and `>`, starting at `pos`; used for validating closing tags
 function _match_closing_tag(buf, pos, len, keystartpos, keylen, key)
     for i = 0:(keylen - 1)
         (pos <= len && getbyte(buf, pos) == getbyte(buf, keystartpos + i)) || throw(ArgumentError("malformed xml; expected closing tag for key: `$key`"))
+        pos += 1
+    end
+    while pos <= len && _xml_whitespace(getbyte(buf, pos))
         pos += 1
     end
     (pos <= len && getbyte(buf, pos) == UInt8('>')) || throw(ArgumentError("malformed xml; expected closing tag for key: `$key`"))
@@ -559,7 +562,7 @@ end
 
 function readxml(buf, pos, len, b)
     pos += 1
-    # parse key until space or closing tag
+    # parse key until whitespace or closing tag
     keystartpos = pos
     foundspace = false
     selfclosing = false
@@ -574,7 +577,7 @@ function readxml(buf, pos, len, b)
             selfclosing = true
             foundspace = true
         else
-            foundspace = foundspace || b == UInt8(' ')
+            foundspace = foundspace || _xml_whitespace(b)
             keylen += !foundspace
         end
         pos += 1

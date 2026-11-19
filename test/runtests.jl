@@ -442,6 +442,10 @@ end
     @test x.figs["blank"] == ""
     @test x.figs["nested"] == Dict{String, Any}("inner" => "value")
 
+    # any xml whitespace may separate a tag name from its attributes, `/>`, or a closing `>`
+    @test Figgy.XmlObject("<root>\n<k\n  a=\"1\">v</k>\n<t\ta=\"1\"/><c>w</c\r\n></root >").figs ==
+        Dict{String, Any}("k" => "v", "t" => "", "c" => "w")
+
     # entity references are decoded; CDATA sections are kept verbatim
     x = Figgy.XmlObject("""
     <root>
