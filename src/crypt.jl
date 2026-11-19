@@ -137,7 +137,9 @@ Encrypt a string or byte vector with a password/secret string or byte vector.
 
 The default returns a self-describing `ENC[figgy-v1](...)` value. Passing
 `key_id` stores an explicit key identifier in the envelope so decryptors can
-route to the correct key without trying keys by exception.
+route to the correct key without trying keys by exception; the identifier lives
+in the `ENC[figgy-v1:key_id](...)` wrapper, so it can't be combined with
+`wrap=false`.
 
 Random salt/iv bytes are drawn from `Random.RandomDevice()` (the OS
 cryptographically-secure entropy source) by default; pass `rng`, or explicit
@@ -267,6 +269,7 @@ is_encrypted(value::AbstractString) = startswith(strip(String(value)), "ENC(") |
 
 function _encrypt(secret, plaintext::Vector{UInt8}, config::CipherConfig, key_id, aad::Vector{UInt8}, rng, salt, iv, wrap)
     key_id !== nothing && config.envelope != :figgy_v1 && throw(ArgumentError("key_id is only supported by the Figgy v1 envelope"))
+    key_id !== nothing && wrap === false && throw(ArgumentError("key_id is stored in the ENC[figgy-v1:key_id](...) wrapper, so it can't be combined with wrap=false"))
     salt = _materialize_bytes(salt, config.salt_bytes, "salt", rng)
     iv = _materialize_bytes(iv, config.iv_bytes, "iv", rng)
     key = derive_key(secret, salt; config=config)
