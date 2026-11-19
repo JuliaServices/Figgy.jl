@@ -134,15 +134,13 @@ _entries(n) = n == 1 ? "1 entry" : "$n entries"
 
 # Prints keys and sources only: stores often hold secrets, and printed stores end up in logs.
 # Built-in sources print without their values too.
+# Entries are copied first so that a slow or blocked `io` never holds the store lock.
 function Base.show(io::IO, store::Store)
-    Base.@lock store.lock begin
-        print(io, "Figgy.Store:")
-        if isempty(store.store)
-            print(io, "\nNo entries")
-        end
-        for (k, fig) in store.store
-            print(io, "\n  $k from `$(fig.sources[end])`, $(_entries(length(fig.values)))")
-        end
+    entries = Base.@lock store.lock [(k, fig.sources[end], length(fig.values)) for (k, fig) in store.store]
+    print(io, "Figgy.Store:")
+    isempty(entries) && print(io, "\nNo entries")
+    for (k, source, n) in entries
+        print(io, "\n  $k from `$source`, $(_entries(n))")
     end
 end
 
