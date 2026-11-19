@@ -219,6 +219,9 @@ end
     @test !startswith(bare, "ENC")
     @test Figgy.decrypt("secret", bare) == "hello"
 
+    # the key_id lives in the ENC[figgy-v1:key_id](...) wrapper, so it can't be dropped by wrap=false
+    @test_throws ArgumentError Figgy.encrypt("secret", "hello"; key_id="v1", wrap=false)
+
     # the self-describing figgy envelope wins over a mismatched explicit config
     @test Figgy.decrypt("secret", enc; config=jasypt) == "hello"
 
