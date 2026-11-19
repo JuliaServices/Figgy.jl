@@ -338,7 +338,7 @@ end
 Allows lazily transforming keys of a `Figgy.FigSource` object. Source is any official `Figgy.FigSource` object,
 or a generic key-value-producer object, like `Dict`, `NamedTuple`, or `Pair`. Mappings can be a one of the following:
   * a `Function` that takes a key and returns a new key; applies to all keys in `source`
-    * a `Dict` with keys of `String` and values of:
+    * a `Dict` with keys of `String` (matched against `string(key)` of each source key) and values of:
       * a `String` that is the new key
       * a `Function` that takes a key and returns a new key; only applies to the matched key in `source`
 
@@ -364,9 +364,10 @@ Base.IteratorEltype(::Type{<:KeyMap}) = Base.EltypeUnknown()
 Base.iterate(x::KeyMap) = _iterate(x, _pairs(load(x.source)))
 Base.iterate(x::KeyMap, (source, st)) = _iterate(x, source, st)
 _keymap_selected(mapping::Function, key) = true
-_keymap_selected(mapping, key) = haskey(mapping, key)
+# mapping keys are Strings; `string` lets them match NamedTuple (Symbol) source keys too
+_keymap_selected(mapping, key) = haskey(mapping, string(key))
 _keymap_value(mapping::Function, key) = mapping(key)
-_keymap_value(mapping, key) = get(mapping, key, key)
+_keymap_value(mapping, key) = get(mapping, string(key), key)
 _keymap_key(key, key2::Function) = key2(key)
 _keymap_key(key, key2) = key === key2 ? key : key2
 function _iterate(x::KeyMap, source, st...)
@@ -397,6 +398,7 @@ Allows filtering keys of a `Figgy.FigSource` object. Source is any official `Fig
 or a generic key-value-producer object, like `Dict`, `NamedTuple`, or `Pair`. `keys` can be a one of the following:
   * a `Function` that takes a key and returns a `Bool`; applies to all keys in `source`
   * a `Set` of `String` keys that are the only keys to be included in the result
+    (matched against `string(key)`, so they also select `NamedTuple` keys)
 """
 function select end
 
@@ -411,7 +413,7 @@ Base.IteratorEltype(::Type{<:Select}) = Base.EltypeUnknown()
 
 Base.iterate(x::Select) = _iterate(x, _pairs(load(x.source)))
 Base.iterate(x::Select, (source, st)) = _iterate(x, source, st)
-_selected(set::Set, key) = key in set
+_selected(set::Set, key) = key in set || string(key) in set
 _selected(f::Function, key) = f(key)
 function _iterate(x::Select, source, st...)
     state = iterate(source, st...)
