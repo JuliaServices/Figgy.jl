@@ -441,6 +441,10 @@ end
     @test x.figs["alsoempty"] == ""
     @test x.figs["blank"] == ""
     @test x.figs["nested"] == Dict{String, Any}("inner" => "value")
+    # a root element without child elements holds no config pairs
+    @test Figgy.XmlObject("<root/>").figs == Dict{String, Any}()
+    @test Figgy.XmlObject("<root>\n</root>").figs == Dict{String, Any}()
+    @test_throws ArgumentError Figgy.XmlObject("<root>text</root>")
 
     # any xml whitespace may separate a tag name from its attributes, `/>`, or a closing `>`
     @test Figgy.XmlObject("<root>\n<k\n  a=\"1\">v</k>\n<t\ta=\"1\"/><c>w</c\r\n></root >").figs ==

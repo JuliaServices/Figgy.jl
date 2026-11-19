@@ -430,6 +430,11 @@ function XmlObject(xml::Union{AbstractString, AbstractVector{UInt8}}, path::Stri
     b = getbyte(buf, pos)
     b == UInt8('<') || throw(ArgumentError("invalid xml; missing opening tag '<'"))
     pos, (rootkey, root) = readxml(buf, pos, len, b)
+    # a root without child elements reads as its text, which is not a key-value pair
+    if !(root isa Dict{String, Any})
+        isempty(root) || throw(ArgumentError("invalid xml for Figgy.XmlObject: root element `$rootkey` has text instead of child elements"))
+        root = Dict{String, Any}()
+    end
     if !isempty(path)
         for key in split(path, '.')
             root = root[key]::Dict{String, Any}
