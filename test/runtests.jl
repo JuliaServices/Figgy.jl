@@ -213,6 +213,11 @@ end
     @test_throws Figgy.Crypt.InvalidCiphertextError Figgy.decrypt("secret", cbc_enc)
     @test Figgy.decrypt("secret", cbc_enc; config=cbc) == "hello"
 
+    # the :jasypt and :bare payloads (salt || iv || ciphertext) have nowhere to keep a GCM tag,
+    # so a GCM config with them would encrypt values that can never be decrypted
+    @test_throws ArgumentError Figgy.Crypt.CipherConfig(; envelope=:bare)
+    @test_throws ArgumentError Figgy.Crypt.CipherConfig(; envelope=:jasypt)
+
     # PBKDF2 iteration counts are bounded
     @test_throws ArgumentError Figgy.Crypt.CipherConfig(; iterations=0)
     @test_throws ArgumentError Figgy.Crypt.CipherConfig(; iterations=20_000_000)
