@@ -141,6 +141,13 @@ end
         Figgy.load!(store, selected; log=false)
         @test store["KEY"] == "value"
     end
+    # String mappings and key sets also match NamedTuple (Symbol) keys
+    nt = (a="1", b="2")
+    @test collect(Figgy.kmap(nt, "a" => "A"; select=true)) == ["A" => "1"]
+    @test collect(Figgy.select(nt, "a")) == [:a => "1"]
+    store = Figgy.Store()
+    Figgy.load!(store, Figgy.kmap(nt, "a" => "A"); log=false)
+    @test sort(collect(store); by=first) == ["A" => "1", "b" => "2"]
     @test isempty(collect(Figgy.kmap(NamedTuple(), string)))
     @test isempty(collect(Figgy.select(NamedTuple(), _ -> true)))
     # filtering out many consecutive keys used to blow the stack via recursion
