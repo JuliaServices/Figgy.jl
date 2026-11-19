@@ -25,7 +25,9 @@ and [`Figgy.Crypt.decrypt`](@ref).
 The default config uses PBKDF2-HMAC-SHA256 and AES-256-GCM with a self-describing
 `ENC[figgy-v1](...)` envelope. CBC configs are supported for interoperability
 with existing ecosystems, but new Figgy-managed values should prefer the default
-authenticated encryption profile.
+authenticated encryption profile. The `:jasypt` and `:bare` envelopes store
+`salt || iv || ciphertext` with no authentication tag, so they require an
+AES-CBC `algorithm`.
 """
 struct CipherConfig
     algorithm::Symbol
@@ -102,6 +104,9 @@ function CipherConfig(;
         iv_bytes == 16 || throw(ArgumentError("AES-CBC requires a 16-byte IV"))
     end
     envelope in (:figgy_v1, :jasypt, :bare) || throw(ArgumentError("unsupported envelope: $envelope"))
+    # :jasypt and :bare payloads are salt || iv || ciphertext, with nowhere to keep a GCM tag
+    _is_gcm(algorithm) && envelope != :figgy_v1 &&
+        throw(ArgumentError("AES-GCM requires the :figgy_v1 envelope; pass wrap=false to encrypt for an unwrapped value"))
     return CipherConfig(algorithm, digest, iterations, salt_bytes, iv_bytes, tag_bytes, key_bytes, normalize_password, envelope)
 end
 
