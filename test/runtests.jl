@@ -434,6 +434,10 @@ end
     @test x.figs["alsoempty"] == ""
     @test x.figs["blank"] == ""
     @test x.figs["nested"] == Dict{String, Any}("inner" => "value")
+    # a root element without child elements holds no config pairs
+    @test Figgy.XmlObject("<root/>").figs == Dict{String, Any}()
+    @test Figgy.XmlObject("<root>\n</root>").figs == Dict{String, Any}()
+    @test_throws ArgumentError Figgy.XmlObject("<root>text</root>")
 
     # entity references are decoded; CDATA sections are kept verbatim
     x = Figgy.XmlObject("""
