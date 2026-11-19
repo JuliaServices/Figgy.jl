@@ -70,6 +70,20 @@ end
     @test timedwait(() -> istaskdone(t), 10) == :ok
     istaskdone(t) && @test fetch(t) == "1"
 
+    # printing a store doesn't hold its lock while writing, so a blocked destination can't stall reads
+    big = Figgy.Store()
+    Figgy.load!(big, Dict("key$i" => "v" for i in 1:20_000); log=false)
+    pipe = Pipe()
+    Base.link_pipe!(pipe; reader_supports_async=true, writer_supports_async=true)
+    printer = @async show(pipe.in, big) # nobody reads `pipe` yet, so this blocks once it fills
+    reader = @async (yield(); get(big, "key1", nothing))
+    @test timedwait(() -> istaskdone(reader), 10) == :ok
+    printed = @async read(pipe.out, String)
+    wait(printer)
+    close(pipe.in)
+    @test startswith(fetch(printed), "Figgy.Store:")
+    @test fetch(reader) == "v"
+
     store["c"] = "3"
     @test store["c"] == "3"
     @test length(store) == 3
